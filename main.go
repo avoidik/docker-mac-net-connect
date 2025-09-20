@@ -4,12 +4,14 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -43,6 +45,14 @@ const (
 )
 
 func main() {
+	var hostPeerIp string
+	var vmPeerIp string
+	var interfaceName string
+	flag.StringVar(&hostPeerIp, "host-peer-ip", "10.33.33.1", "Host peer IP address")
+	flag.StringVar(&vmPeerIp, "vm-peer-ip", "10.33.33.2", "VM peer IP address")
+	flag.StringVar(&interfaceName, "interface-name", "chip0", "WireGuard interface name")
+	flag.Parse()
+
 	logLevel := func() int {
 		switch os.Getenv("LOG_LEVEL") {
 		case "verbose", "debug":
@@ -63,7 +73,7 @@ func main() {
 		os.Exit(ExitSetupFailed)
 	}
 
-	interfaceName, err := tun.Name()
+	interfaceName, err = tun.Name()
 	if err != nil {
 		fmt.Printf("Failed to get TUN device name: %v\n", err)
 		os.Exit(ExitSetupFailed)
@@ -108,9 +118,6 @@ func main() {
 	logger.Verbosef("UAPI listener started")
 
 	// Wireguard configuration
-
-	hostPeerIp := "10.33.33.1"
-	vmPeerIp := "10.33.33.2"
 
 	c, err := wgctrl.New()
 	if err != nil {
@@ -187,7 +194,14 @@ func main() {
 		for {
 			logger.Verbosef("Setting up Wireguard on Docker Desktop VM\n")
 
-			err = setupVm(ctx, cli, port, hostPeerIp, vmPeerIp, hostPrivateKey, vmPrivateKey)
+			dockerCIDRs := networkManager.GetDockerCIDRs()
+			if len(dockerCIDRs) == 0 {
+				logger.Verbosef("No Docker networks found, skipping VM setup\n")
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
+			err = setupVm(ctx, cli, port, hostPeerIp, vmPeerIp, interfaceName, dockerCIDRs, hostPrivateKey, vmPrivateKey)
 			if err != nil {
 				logger.Errorf("Failed to setup VM: %v", err)
 				time.Sleep(5 * time.Second)
@@ -276,6 +290,8 @@ func setupVm(
 	serverPort int,
 	hostPeerIp string,
 	vmPeerIp string,
+	interfaceName string,
+	dockerCIDRs []string,
 	hostPrivateKey wgtypes.Key,
 	vmPrivateKey wgtypes.Key,
 ) error {
@@ -299,6 +315,8 @@ func setupVm(
 			"SERVER_PORT=" + strconv.Itoa(serverPort),
 			"HOST_PEER_IP=" + hostPeerIp,
 			"VM_PEER_IP=" + vmPeerIp,
+			"INTERFACE_NAME=" + interfaceName,
+			"DOCKER_CIDRS=" + strings.Join(dockerCIDRs, ","),
 			"HOST_PUBLIC_KEY=" + hostPrivateKey.PublicKey().String(),
 			"VM_PRIVATE_KEY=" + vmPrivateKey.String(),
 		},
