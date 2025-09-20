@@ -48,9 +48,11 @@ func main() {
 	var hostPeerIp string
 	var vmPeerIp string
 	var interfaceName string
+	var dockerSocket string
 	flag.StringVar(&hostPeerIp, "host-peer-ip", "10.33.33.1", "Host peer IP address")
 	flag.StringVar(&vmPeerIp, "vm-peer-ip", "10.33.33.2", "VM peer IP address")
 	flag.StringVar(&interfaceName, "interface-name", "chip0", "WireGuard interface name")
+	flag.StringVar(&dockerSocket, "docker-socket", "unix:///var/run/docker.sock", "Docker socket path")
 	flag.Parse()
 
 	logLevel := func() int {
@@ -180,7 +182,7 @@ func main() {
 
 	logger.Verbosef("Interface %s created\n", interfaceName)
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithHost(dockerSocket))
 	if err != nil {
 		logger.Errorf("Failed to create Docker client: %v", err)
 		os.Exit(ExitSetupFailed)
