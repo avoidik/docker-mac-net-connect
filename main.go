@@ -49,10 +49,12 @@ func main() {
 	var vmPeerIp string
 	var interfaceName string
 	var dockerSocket string
+	var enableDockerFilter bool
 	flag.StringVar(&hostPeerIp, "host-peer-ip", "10.33.33.1", "Host peer IP address")
 	flag.StringVar(&vmPeerIp, "vm-peer-ip", "10.33.33.2", "VM peer IP address")
 	flag.StringVar(&interfaceName, "interface-name", "chip0", "WireGuard interface name")
 	flag.StringVar(&dockerSocket, "docker-socket", "unix:///var/run/docker.sock", "Docker socket path")
+	flag.BoolVar(&enableDockerFilter, "enable-docker-filter", true, "Enable iptables filter rule for Docker chain")
 	flag.Parse()
 
 	logLevel := func() int {
@@ -203,7 +205,7 @@ func main() {
 				continue
 			}
 
-			err = setupVm(ctx, cli, port, hostPeerIp, vmPeerIp, interfaceName, dockerCIDRs, hostPrivateKey, vmPrivateKey)
+			err = setupVm(ctx, cli, port, hostPeerIp, vmPeerIp, interfaceName, dockerCIDRs, enableDockerFilter, hostPrivateKey, vmPrivateKey)
 			if err != nil {
 				logger.Errorf("Failed to setup VM: %v", err)
 				time.Sleep(5 * time.Second)
@@ -294,6 +296,7 @@ func setupVm(
 	vmPeerIp string,
 	interfaceName string,
 	dockerCIDRs []string,
+	enableDockerFilter bool,
 	hostPrivateKey wgtypes.Key,
 	vmPrivateKey wgtypes.Key,
 ) error {
@@ -319,6 +322,7 @@ func setupVm(
 			"VM_PEER_IP=" + vmPeerIp,
 			"INTERFACE_NAME=" + interfaceName,
 			"DOCKER_CIDRS=" + strings.Join(dockerCIDRs, ","),
+			"ENABLE_DOCKER_FILTER=" + strconv.FormatBool(enableDockerFilter),
 			"HOST_PUBLIC_KEY=" + hostPrivateKey.PublicKey().String(),
 			"VM_PRIVATE_KEY=" + vmPrivateKey.String(),
 		},

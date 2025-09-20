@@ -26,6 +26,12 @@ func cleanup(interfaceName string, ipt *iptables.IPTables, hostPeerIp string, do
 			fmt.Printf("Removing NAT rule for CIDR: %s\n", cidr)
 			ipt.Delete("nat", "POSTROUTING", "-s", hostPeerIp, "-d", cidr, "-j", "MASQUERADE")
 		}
+
+		fmt.Println("Removing iptables filter rules")
+		for _, cidr := range dockerCIDRs {
+			fmt.Printf("Removing filter rule for CIDR: %s\n", cidr)
+			ipt.Delete("filter", "DOCKER", "-s", hostPeerIp, "-d", cidr, "-j", "ACCEPT")
+		}
 	}
 
 	links, err := netlink.LinkList()
@@ -90,6 +96,9 @@ func main() {
 		os.Exit(ExitSetupFailed)
 	}
 	dockerCIDRs := strings.Split(dockerCIDRsString, ",")
+
+	enableDockerFilterString := os.Getenv("ENABLE_DOCKER_FILTER")
+	enableDockerFilter := strings.ToLower(enableDockerFilterString) == "true"
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -249,6 +258,34 @@ func main() {
 			fmt.Printf("Failed to add iptables nat rule for CIDR %s: %v\n", cidr, err)
 			cleanup(interfaceName, ipt, hostPeerIp, dockerCIDRs)
 			os.Exit(ExitSetupFailed)
+		}
+	}
+
+	if enableDockerFilter {
+		fmt.Println("Adding specific iptables filter rules for Docker networks")
+
+		// Add specific iptables filter rules for each Docker network CIDR
+		// This allows traffic from hostPeerIp only to specific Docker networks
+		for _, cidr := range dockerCIDRs {
+			fmt.Printf("Adding filter rule for Docker CIDR: %s\n", cidr)
+			err = ipt.DeleteIfExists("filter", "DOCKER",
+				"-s", hostPeerIp,
+				"-d", cidr,
+				"-j", "ACCEPT")
+			if err != nil {
+				fmt.Printf("Failed to delete iptables filter rule for CIDR %s: %v\n", cidr, err)
+				cleanup(interfaceName, ipt, hostPeerIp, dockerCIDRs)
+				os.Exit(ExitSetupFailed)
+			}
+			err = ipt.Insert("filter", "DOCKER", 1,
+				"-s", hostPeerIp,
+				"-d", cidr,
+				"-j", "ACCEPT")
+			if err != nil {
+				fmt.Printf("Failed to insert iptables filter rule for CIDR %s: %v\n", cidr, err)
+				cleanup(interfaceName, ipt, hostPeerIp, dockerCIDRs)
+				os.Exit(ExitSetupFailed)
+			}
 		}
 	}
 
