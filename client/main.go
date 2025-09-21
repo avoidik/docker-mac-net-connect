@@ -118,6 +118,11 @@ func main() {
 	}
 	dockerInterfaces := strings.Split(dockerInterfacesString, ",")
 
+	if len(dockerCIDRs) != len(dockerInterfaces) {
+		fmt.Printf("DOCKER_CIDRS and DOCKER_INTERFACES must have equal number of elements: got %d CIDRs and %d interfaces\n", len(dockerCIDRs), len(dockerInterfaces))
+		os.Exit(ExitSetupFailed)
+	}
+
 	enableDockerFilterString := os.Getenv("ENABLE_DOCKER_FILTER")
 	enableDockerFilter := strings.ToLower(enableDockerFilterString) == "true"
 
